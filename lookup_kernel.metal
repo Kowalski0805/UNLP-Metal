@@ -1,0 +1,70 @@
+#include <metal_stdlib>
+using namespace metal;
+
+#define MAX_WORD_LEN 37
+
+struct GpuState {
+    uint transition_start_idx;
+    uint num_transitions;
+    int lemma_offset;
+};
+
+struct GpuTransition {
+    uchar c;
+    uint next_state;
+};
+
+kernel void lookup_kernel(
+    const device char*         input_words       [[ buffer(0) ]],
+    const device GpuState*     states            [[ buffer(1) ]],
+    const device GpuTransition* transitions      [[ buffer(2) ]],
+    const device char*         lemma_buffer      [[ buffer(3) ]],
+    device char*               output_lemmas     [[ buffer(4) ]],
+    uint gid [[ thread_position_in_grid ]]
+) {
+    uint input_offset = gid * MAX_WORD_LEN;
+    uint output_offset = gid * MAX_WORD_LEN;
+
+    int state = 0;
+
+    for (uint i = 0; i < MAX_WORD_LEN; ++i) {
+        char ch = input_words[input_offset + i];
+        if (ch == '\0') break;
+
+        GpuState s = states[state];
+        bool matched = false;
+
+        for (uint j = 0; j < s.num_transitions; ++j) {
+            GpuTransition t = transitions[s.transition_start_idx + j];
+            if (t.c == static_cast<uchar>(ch)) {
+                state = t.next_state;
+                matched = true;
+                break;
+            }
+        }
+
+        if (!matched) {
+            for (uint k = 0; k < MAX_WORD_LEN; ++k) {
+                char c = input_words[input_offset + k];
+                output_lemmas[output_offset + k] = c;
+                if (c == '\0') break;
+            }
+            return;
+        }
+    }
+
+    GpuState final_state = states[state];
+    if (final_state.lemma_offset >= 0) {
+        for (uint i = 0; i < MAX_WORD_LEN; ++i) {
+            char c = lemma_buffer[final_state.lemma_offset + i];
+            output_lemmas[output_offset + i] = c;
+            if (c == '\0') break;
+        }
+    } else {
+        for (uint k = 0; k < MAX_WORD_LEN; ++k) {
+            char c = input_words[input_offset + k];
+            output_lemmas[output_offset + k] = c;
+            if (c == '\0') break;
+        }
+    }
+}
