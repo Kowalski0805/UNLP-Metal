@@ -6,6 +6,7 @@
 resources/
 lemmatizer
 trie_cpu_test
+scripts/uk_lemmatizer_dataset.txt
 
 ## User settings
 xcuserdata/
@@ -17,7 +18,7 @@ xcuserdata/
 *.ipa
 *.dSYM.zip
 *.dSYM
-
+*.txt
 # CocoaPods
 #
 # We recommend against adding the Pods directory to your .gitignore. However
