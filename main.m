@@ -17,7 +17,7 @@ int main(int argc, const char * argv[]) {
             fprintf(stderr, "Failed to read file: %s\n", argv[1]);
             return 1;
         }
-
+         
         NSArray<NSString *> *words = [content componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         words = [words filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]];
 

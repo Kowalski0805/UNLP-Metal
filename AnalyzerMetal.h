@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 
+
 @interface AnalyzerMetal : NSObject
 
 - (instancetype)initWithDevice:(id<MTLDevice>)device;

@@ -1,7 +1,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-#define MAX_WORD_LEN 37
+
 
 struct GpuState {
     uint transition_start_idx;
@@ -20,31 +20,42 @@ kernel void lookup_kernel(
     const device GpuTransition* transitions      [[ buffer(2) ]],
     const device char*         lemma_buffer      [[ buffer(3) ]],
     device char*               output_lemmas     [[ buffer(4) ]],
+    const device uint&         max_word_len      [[ buffer(5) ]],
     uint gid [[ thread_position_in_grid ]]
 ) {
-    uint input_offset = gid * MAX_WORD_LEN;
-    uint output_offset = gid * MAX_WORD_LEN;
+    uint input_offset = gid * max_word_len;
+    uint output_offset = gid * max_word_len;
 
     int state = 0;
 
-    for (uint i = 0; i < MAX_WORD_LEN; ++i) {
+    for (uint i = 0; i < max_word_len; ++i) {
         char ch = input_words[input_offset + i];
         if (ch == '\0') break;
 
         GpuState s = states[state];
         bool matched = false;
 
-        for (uint j = 0; j < s.num_transitions; ++j) {
-            GpuTransition t = transitions[s.transition_start_idx + j];
+        uint low = 0;
+        uint high = s.num_transitions;
+        
+        while(low < high) {
+            uint mid = low + (high - low) / 2;
+            GpuTransition t = transitions[s.transition_start_idx + mid];
+
             if (t.c == static_cast<uchar>(ch)) {
                 state = t.next_state;
                 matched = true;
                 break;
             }
+            if (t.c < static_cast<uchar>(ch)) {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
         }
 
         if (!matched) {
-            for (uint k = 0; k < MAX_WORD_LEN; ++k) {
+            for (uint k = 0; k < max_word_len; ++k) {
                 char c = input_words[input_offset + k];
                 output_lemmas[output_offset + k] = c;
                 if (c == '\0') break;
@@ -55,13 +66,13 @@ kernel void lookup_kernel(
 
     GpuState final_state = states[state];
     if (final_state.lemma_offset >= 0) {
-        for (uint i = 0; i < MAX_WORD_LEN; ++i) {
+        for (uint i = 0; i < max_word_len; ++i) {
             char c = lemma_buffer[final_state.lemma_offset + i];
             output_lemmas[output_offset + i] = c;
             if (c == '\0') break;
         }
     } else {
-        for (uint k = 0; k < MAX_WORD_LEN; ++k) {
+        for (uint k = 0; k < max_word_len; ++k) {
             char c = input_words[input_offset + k];
             output_lemmas[output_offset + k] = c;
             if (c == '\0') break;
