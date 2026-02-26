@@ -10,6 +10,10 @@
 @property (nonatomic, strong) id<MTLBuffer> statesBuffer;
 @property (nonatomic, strong) id<MTLBuffer> transitionsBuffer;
 @property (nonatomic, strong) id<MTLBuffer> lemmaBuffer;
+// Retained to keep the backing memory alive for the NoCopy buffers above
+@property (nonatomic, strong) NSData *statesData;
+@property (nonatomic, strong) NSData *transitionsData;
+@property (nonatomic, strong) NSData *lemmasData;
 @end
 
 @implementation AnalyzerMetal
@@ -30,21 +34,13 @@
         _pipeline = [device newComputePipelineStateWithFunction:kernel error:&error];
         if (error) { NSLog(@" Failed to create pipeline: %@", error); return nil; }
 
-        NSData *trieData = [NSData dataWithContentsOfFile: @"resources/trie.bin"];
-        const void *trieBytes = [trieData bytes];
+        _statesData = [NSData dataWithContentsOfFile:@"resources/gpu_states.bin"];
+        _transitionsData = [NSData dataWithContentsOfFile:@"resources/gpu_transitions.bin"];
+        _lemmasData = [NSData dataWithContentsOfFile:@"resources/gpu_lemmas.bin"];
 
-        const int *header = (const int *)trieBytes;
-        int statesSize = header[0];
-        int transitionsSize = header[1];
-        int lemmasSize = header[2];
-
-        const void *statesPtr = trieBytes + sizeof(int) * 3;
-        const void *transitionsPtr = statesPtr + statesSize;
-        const void *lemmasPtr = transitionsPtr + transitionsSize;
-                                                                                                        
-        _statesBuffer = [device newBufferWithBytesNoCopy:(void *)statesPtr length:statesSize options:MTLResourceStorageModeShared deallocator:nil];
-        _transitionsBuffer = [device newBufferWithBytesNoCopy:(void *)transitionsPtr length:transitionsSize options:MTLResourceStorageModeShared deallocator:nil];
-        _lemmaBuffer = [device newBufferWithBytesNoCopy:(void *)lemmasPtr length:lemmasSize options:MTLResourceStorageModeShared deallocator:nil];
+        _statesBuffer = [device newBufferWithBytesNoCopy:(void *)_statesData.bytes length:_statesData.length options:MTLResourceStorageModeShared deallocator:nil];
+        _transitionsBuffer = [device newBufferWithBytesNoCopy:(void *)_transitionsData.bytes length:_transitionsData.length options:MTLResourceStorageModeShared deallocator:nil];
+        _lemmaBuffer = [device newBufferWithBytesNoCopy:(void *)_lemmasData.bytes length:_lemmasData.length options:MTLResourceStorageModeShared deallocator:nil];
     }
     return self;
 }
@@ -72,7 +68,7 @@
 
         NSUInteger max_word_len = 0;
         for (NSString *word in batch) {
-            max_word_len = MAX(max_word_len, word.length + 1);
+            max_word_len = MAX(max_word_len, [word lengthOfBytesUsingEncoding:NSUTF8StringEncoding] + 1);
         }
 
         NSUInteger bufferSize = batch.count * max_word_len;

@@ -35,22 +35,12 @@ kernel void lookup_kernel(
         GpuState s = states[state];
         bool matched = false;
 
-        uint low = 0;
-        uint high = s.num_transitions;
-        
-        while(low < high) {
-            uint mid = low + (high - low) / 2;
-            GpuTransition t = transitions[s.transition_start_idx + mid];
-
+        for (uint k = 0; k < s.num_transitions; ++k) {
+            GpuTransition t = transitions[s.transition_start_idx + k];
             if (t.c == static_cast<uchar>(ch)) {
                 state = t.next_state;
                 matched = true;
                 break;
-            }
-            if (t.c < static_cast<uchar>(ch)) {
-                low = mid + 1;
-            } else {
-                high = mid;
             }
         }
 
