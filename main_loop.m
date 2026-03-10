@@ -4,24 +4,33 @@
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         if (argc < 2) {
-            fprintf(stderr, "Usage: %s [--packed|--packed-col] <input_file.txt>\n", argv[0]);
+            fprintf(stderr, "Usage: %s [--packed|--packed-col] <input_file.txt> [duration_s]\n", argv[0]);
             return 1;
         }
 
         BOOL usePacked    = (argc >= 3) && (strcmp(argv[1], "--packed") == 0);
         BOOL usePackedCol = (argc >= 3) && (strcmp(argv[1], "--packed-col") == 0);
         BOOL hasFlag = usePacked || usePackedCol;
-        NSString *path = [NSString stringWithUTF8String:hasFlag ? argv[2] : argv[1]];
+
+        const char *filePath   = hasFlag ? argv[2] : argv[1];
+        double runDuration     = 10.0;
+        if (argc >= (hasFlag ? 4 : 3))
+            runDuration = atof(hasFlag ? argv[3] : argv[2]);
+
+        NSString *path = [NSString stringWithUTF8String:filePath];
         NSError *readError = nil;
         NSString *content = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&readError];
-
         if (readError || !content) {
-            fprintf(stderr, "Failed to read file: %s\n", argv[1]);
+            fprintf(stderr, "Failed to read file: %s\n", filePath);
             return 1;
         }
-         
+
         NSArray<NSString *> *words = [content componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         words = [words filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]];
+        if (words.count == 0) {
+            fprintf(stderr, "No words in input file.\n");
+            return 1;
+        }
 
         id<MTLDevice> device = MTLCreateSystemDefaultDevice();
         if (!device) {
@@ -31,26 +40,13 @@ int main(int argc, const char * argv[]) {
 
         AnalyzerMetal *analyzer = [[AnalyzerMetal alloc] initWithDevice:device];
 
-        double kernelMs = 0.0, totalMs = 0.0;
-        NSArray<NSString *> *results;
         if (usePackedCol) {
-            results = [analyzer lemmatizeBatchPackedColumn:words kernelMs:&kernelMs totalMs:&totalMs];
+            [analyzer benchLoopPackedColumn:words duration:runDuration];
         } else if (usePacked) {
-            results = [analyzer lemmatizeBatchPacked:words kernelMs:&kernelMs totalMs:&totalMs];
+            [analyzer benchLoopPacked:words duration:runDuration];
         } else {
-            results = [analyzer lemmatizeBatch:words kernelMs:&kernelMs totalMs:&totalMs];
+            [analyzer benchLoopFixedStride:words duration:runDuration];
         }
-
-        for (NSUInteger i = 0; i < results.count; i++) {
-            printf("%s → %s\n", [words[i] UTF8String], [results[i] UTF8String]);
-        }
-
-        double throughput = results.count / (kernelMs / 1000.0);
-        const char *label = usePackedCol ? "packed-col" : (usePacked ? "packed" : "fixed-stride");
-        fprintf(stderr, "[%s] Words: %lu  Kernel: %.3f ms  Total (incl. dispatch): %.3f ms  Throughput: %.0f words/sec\n",
-                label,
-                (unsigned long)results.count, kernelMs, totalMs, throughput);
     }
     return 0;
 }
-
