@@ -7,14 +7,17 @@
 - (instancetype)initWithDevice:(id<MTLDevice>)device;
 - (NSArray<NSString *> *)lemmatizeBatch:(NSArray<NSString *> *)words
                                kernelMs:(double *)outKernelMs
+                                 packMs:(double *)outPackMs
                                 totalMs:(double *)outTotalMs;
 
 - (NSArray<NSString *> *)lemmatizeBatchPacked:(NSArray<NSString *> *)words
                                      kernelMs:(double *)outKernelMs
+                                       packMs:(double *)outPackMs
                                       totalMs:(double *)outTotalMs;
 
 - (NSArray<NSString *> *)lemmatizeBatchPackedColumn:(NSArray<NSString *> *)words
                                            kernelMs:(double *)outKernelMs
+                                             packMs:(double *)outPackMs
                                             totalMs:(double *)outTotalMs;
 
 // Loop benchmarks — upload once, hammer kernel until `seconds` wall-clock time

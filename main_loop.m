@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <time.h>
 #import "AnalyzerMetal.h"
 
 int main(int argc, const char * argv[]) {
@@ -17,6 +18,10 @@ int main(int argc, const char * argv[]) {
         if (argc >= (hasFlag ? 4 : 3))
             runDuration = atof(hasFlag ? argv[3] : argv[2]);
 
+        // --- PREPROCESS TIMER START (file I/O + tokenize + filter) ---
+        struct timespec preprocessStart, preprocessEnd;
+        clock_gettime(CLOCK_MONOTONIC, &preprocessStart);
+
         NSString *path = [NSString stringWithUTF8String:filePath];
         NSError *readError = nil;
         NSString *content = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&readError];
@@ -31,6 +36,12 @@ int main(int argc, const char * argv[]) {
             fprintf(stderr, "No words in input file.\n");
             return 1;
         }
+
+        clock_gettime(CLOCK_MONOTONIC, &preprocessEnd);
+        double preprocessMs = (preprocessEnd.tv_sec - preprocessStart.tv_sec) * 1000.0
+                            + (preprocessEnd.tv_nsec - preprocessStart.tv_nsec) / 1e6;
+        fprintf(stderr, "Preprocess (file I/O + tokenize + filter):  %.3f ms\n", preprocessMs);
+        // --- PREPROCESS TIMER END ---
 
         id<MTLDevice> device = MTLCreateSystemDefaultDevice();
         if (!device) {

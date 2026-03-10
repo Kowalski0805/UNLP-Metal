@@ -60,6 +60,7 @@
 
 - (NSArray<NSString *> *)lemmatizeBatch:(NSArray<NSString *> *)words
                                kernelMs:(double *)outKernelMs
+                                 packMs:(double *)outPackMs
                                 totalMs:(double *)outTotalMs {
     NSUInteger total = words.count;
     NSMutableArray<NSString *> *allResults = [NSMutableArray arrayWithCapacity:total];
@@ -71,6 +72,7 @@
     dispatch_semaphore_t semaphore = dispatch_semaphore_create([[NSProcessInfo processInfo] activeProcessorCount]);
 
     __block double gpuTimeAccumMs = 0.0;
+    __block double packTimeAccumMs = 0.0;
     NSObject *gpuTimeLock = [NSObject new];
 
     NSUInteger BATCH_SIZE = 100000;
@@ -84,6 +86,10 @@
 
         NSRange range = NSMakeRange(i, MIN(BATCH_SIZE, total - i));
         NSArray<NSString *> *batch = [words subarrayWithRange:range];
+
+        // --- PACK TIMER START ---
+        struct timespec packStart, packEnd;
+        clock_gettime(CLOCK_MONOTONIC, &packStart);
 
         NSUInteger max_word_len = 0;
         for (NSString *word in batch) {
@@ -101,6 +107,12 @@
             const char *cstr = [batch[j] UTF8String];
             strncpy(inputWords + j * max_word_len, cstr, max_word_len - 1);
         }
+
+        clock_gettime(CLOCK_MONOTONIC, &packEnd);
+        double batchPackMs = (packEnd.tv_sec - packStart.tv_sec) * 1000.0
+                           + (packEnd.tv_nsec - packStart.tv_nsec) / 1e6;
+        @synchronized (gpuTimeLock) { packTimeAccumMs += batchPackMs; }
+        // --- PACK TIMER END ---
 
         id<MTLCommandBuffer> cmdBuf = [self.commandQueue commandBuffer];
         id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
@@ -147,14 +159,16 @@
                   + (wallEnd.tv_nsec - wallStart.tv_nsec) / 1e6;
 
     if (outKernelMs) *outKernelMs = gpuTimeAccumMs;
+    if (outPackMs)   *outPackMs   = packTimeAccumMs;
     if (outTotalMs)  *outTotalMs  = wallMs;
 
     return allResults;
 }
 
 - (NSArray<NSString *> *)lemmatizeBatchPacked:(NSArray<NSString *> *)words
-                                    kernelMs:(double *)outKernelMs
-                                     totalMs:(double *)outTotalMs {
+                                     kernelMs:(double *)outKernelMs
+                                       packMs:(double *)outPackMs
+                                      totalMs:(double *)outTotalMs {
     NSUInteger total = words.count;
     NSMutableArray<NSString *> *allResults = [NSMutableArray arrayWithCapacity:total];
     for (NSUInteger i = 0; i < total; i++) [allResults addObject:@""];
@@ -163,6 +177,7 @@
     dispatch_semaphore_t semaphore = dispatch_semaphore_create([[NSProcessInfo processInfo] activeProcessorCount]);
 
     __block double gpuTimeAccumMs = 0.0;
+    __block double packTimeAccumMs = 0.0;
     NSObject *gpuTimeLock = [NSObject new];
 
     NSUInteger BATCH_SIZE = 100000;
@@ -177,6 +192,10 @@
         NSRange range = NSMakeRange(i, MIN(BATCH_SIZE, total - i));
         NSArray<NSString *> *batch = [words subarrayWithRange:range];
         NSUInteger count = batch.count;
+
+        // --- PACK TIMER START ---
+        struct timespec packStart, packEnd;
+        clock_gettime(CLOCK_MONOTONIC, &packStart);
 
         // Build offsets and packed input buffer
         NSMutableData *offsetsData = [NSMutableData dataWithLength:(count + 1) * sizeof(uint32_t)];
@@ -198,6 +217,12 @@
             NSUInteger byteLen = offsets[j + 1] - offsets[j];
             memcpy(inputPtr + offsets[j], cstr, byteLen);
         }
+
+        clock_gettime(CLOCK_MONOTONIC, &packEnd);
+        double batchPackMs = (packEnd.tv_sec - packStart.tv_sec) * 1000.0
+                           + (packEnd.tv_nsec - packStart.tv_nsec) / 1e6;
+        @synchronized (gpuTimeLock) { packTimeAccumMs += batchPackMs; }
+        // --- PACK TIMER END ---
 
         id<MTLCommandBuffer> cmdBuf = [self.commandQueue commandBuffer];
         id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
@@ -244,6 +269,7 @@
                   + (wallEnd.tv_nsec - wallStart.tv_nsec) / 1e6;
 
     if (outKernelMs) *outKernelMs = gpuTimeAccumMs;
+    if (outPackMs)   *outPackMs   = packTimeAccumMs;
     if (outTotalMs)  *outTotalMs  = wallMs;
 
     return allResults;
@@ -251,6 +277,7 @@
 
 - (NSArray<NSString *> *)lemmatizeBatchPackedColumn:(NSArray<NSString *> *)words
                                            kernelMs:(double *)outKernelMs
+                                             packMs:(double *)outPackMs
                                             totalMs:(double *)outTotalMs {
     NSUInteger total = words.count;
     NSMutableArray<NSString *> *allResults = [NSMutableArray arrayWithCapacity:total];
@@ -260,6 +287,7 @@
     dispatch_semaphore_t semaphore = dispatch_semaphore_create([[NSProcessInfo processInfo] activeProcessorCount]);
 
     __block double gpuTimeAccumMs = 0.0;
+    __block double packTimeAccumMs = 0.0;
     NSObject *gpuTimeLock = [NSObject new];
 
     NSUInteger BATCH_SIZE = 100000;
@@ -274,6 +302,10 @@
         NSRange range = NSMakeRange(i, MIN(BATCH_SIZE, total - i));
         NSArray<NSString *> *batch = [words subarrayWithRange:range];
         NSUInteger count = batch.count;
+
+        // --- PACK TIMER START ---
+        struct timespec packStart, packEnd;
+        clock_gettime(CLOCK_MONOTONIC, &packStart);
 
         // Build packed input + offsets[N+1]
         NSMutableData *offsetsData = [NSMutableData dataWithLength:(count + 1) * sizeof(uint32_t)];
@@ -295,6 +327,12 @@
             NSUInteger byteLen = offsets[j + 1] - offsets[j];
             memcpy(inputPtr + offsets[j], cstr, byteLen);
         }
+
+        clock_gettime(CLOCK_MONOTONIC, &packEnd);
+        double batchPackMs = (packEnd.tv_sec - packStart.tv_sec) * 1000.0
+                           + (packEnd.tv_nsec - packStart.tv_nsec) / 1e6;
+        @synchronized (gpuTimeLock) { packTimeAccumMs += batchPackMs; }
+        // --- PACK TIMER END ---
 
         id<MTLCommandBuffer> cmdBuf = [self.commandQueue commandBuffer];
         id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
@@ -361,6 +399,7 @@
                   + (wallEnd.tv_nsec - wallStart.tv_nsec) / 1e6;
 
     if (outKernelMs) *outKernelMs = gpuTimeAccumMs;
+    if (outPackMs)   *outPackMs   = packTimeAccumMs;
     if (outTotalMs)  *outTotalMs  = wallMs;
 
     return allResults;
@@ -390,6 +429,10 @@ static void _benchPrintFinal(int numIters, NSUInteger numWords,
     for (NSString *w in words)
         maxWordLen = MAX(maxWordLen, [w lengthOfBytesUsingEncoding:NSUTF8StringEncoding] + 1);
 
+    // --- PACK TIMER START ---
+    struct timespec packStart, packEnd;
+    clock_gettime(CLOCK_MONOTONIC, &packStart);
+
     id<MTLBuffer> inputBuffer  = [self.device newBufferWithLength:count * maxWordLen options:MTLResourceStorageModeShared];
     id<MTLBuffer> outputBuffer = [self.device newBufferWithLength:count * maxWordLen options:MTLResourceStorageModeShared];
     id<MTLBuffer> maxLenBuf    = [self.device newBufferWithBytes:&maxWordLen length:sizeof(maxWordLen) options:MTLResourceStorageModeShared];
@@ -399,12 +442,18 @@ static void _benchPrintFinal(int numIters, NSUInteger numWords,
     for (NSUInteger j = 0; j < count; ++j)
         strncpy(inputPtr + j * maxWordLen, [words[j] UTF8String], maxWordLen - 1);
 
+    clock_gettime(CLOCK_MONOTONIC, &packEnd);
+    double packMs = (packEnd.tv_sec - packStart.tv_sec) * 1000.0
+                  + (packEnd.tv_nsec - packStart.tv_nsec) / 1e6;
+    // --- PACK TIMER END ---
+
     MTLSize gridSize        = MTLSizeMake(count, 1, 1);
     MTLSize threadgroupSize = MTLSizeMake(self.pipeline.threadExecutionWidth, 1, 1);
 
     int numIters = 0;
     double totalKernelMs = 0.0, peakKernelMs = 0.0;
 
+    fprintf(stderr, "Pack (build MTLBuffer + strncpy):           %.3f ms\n", packMs);
     fprintf(stderr, "Running fixed-stride loop for %.1fs  words=%lu\n", seconds, (unsigned long)count);
 
     struct timespec wallStart;
@@ -447,6 +496,10 @@ static void _benchPrintFinal(int numIters, NSUInteger numWords,
     NSUInteger count = words.count;
     if (count == 0) { fprintf(stderr, "No words.\n"); return; }
 
+    // --- PACK TIMER START ---
+    struct timespec packStart2, packEnd2;
+    clock_gettime(CLOCK_MONOTONIC, &packStart2);
+
     uint32_t *offsets = (uint32_t *)malloc((count + 1) * sizeof(uint32_t));
     offsets[0] = 0;
     for (NSUInteger j = 0; j < count; ++j) {
@@ -467,12 +520,18 @@ static void _benchPrintFinal(int numIters, NSUInteger numWords,
         memcpy(inputPtr + off[j], [words[j] UTF8String], byteLen);
     }
 
+    clock_gettime(CLOCK_MONOTONIC, &packEnd2);
+    double packMs2 = (packEnd2.tv_sec - packStart2.tv_sec) * 1000.0
+                   + (packEnd2.tv_nsec - packStart2.tv_nsec) / 1e6;
+    // --- PACK TIMER END ---
+
     MTLSize gridSize        = MTLSizeMake(count, 1, 1);
     MTLSize threadgroupSize = MTLSizeMake(self.pipelinePacked.threadExecutionWidth, 1, 1);
 
     int numIters = 0;
     double totalKernelMs = 0.0, peakKernelMs = 0.0;
 
+    fprintf(stderr, "Pack (build MTLBuffer + memcpy):            %.3f ms\n", packMs2);
     fprintf(stderr, "Running packed loop for %.1fs  words=%lu\n", seconds, (unsigned long)count);
 
     struct timespec wallStart;
@@ -515,6 +574,10 @@ static void _benchPrintFinal(int numIters, NSUInteger numWords,
     NSUInteger count = words.count;
     if (count == 0) { fprintf(stderr, "No words.\n"); return; }
 
+    // --- PACK TIMER START ---
+    struct timespec packStart3, packEnd3;
+    clock_gettime(CLOCK_MONOTONIC, &packStart3);
+
     uint32_t *offsets = (uint32_t *)malloc((count + 1) * sizeof(uint32_t));
     offsets[0] = 0;
     for (NSUInteger j = 0; j < count; ++j) {
@@ -535,12 +598,18 @@ static void _benchPrintFinal(int numIters, NSUInteger numWords,
         memcpy(inputPtr + off[j], [words[j] UTF8String], byteLen);
     }
 
+    clock_gettime(CLOCK_MONOTONIC, &packEnd3);
+    double packMs3 = (packEnd3.tv_sec - packStart3.tv_sec) * 1000.0
+                   + (packEnd3.tv_nsec - packStart3.tv_nsec) / 1e6;
+    // --- PACK TIMER END ---
+
     MTLSize gridSize        = MTLSizeMake(count, 1, 1);
     MTLSize threadgroupSize = MTLSizeMake(self.pipelineIndex.threadExecutionWidth, 1, 1);
 
     int numIters = 0;
     double totalKernelMs = 0.0, peakKernelMs = 0.0;
 
+    fprintf(stderr, "Pack (build MTLBuffer + memcpy):            %.3f ms\n", packMs3);
     fprintf(stderr, "Running packed-col loop for %.1fs  words=%lu\n", seconds, (unsigned long)count);
 
     struct timespec wallStart;
