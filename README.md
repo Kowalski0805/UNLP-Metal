@@ -139,12 +139,14 @@ iter   100  avg ?.??? ms  throughput ???M words/sec
 ### 3. Run the full suite at once
 
 ```bash
-echo "=== One-shot: fixed-stride ===" && ./lemmatizer articles.txt
-echo "=== One-shot: packed ===" && ./lemmatizer --packed articles.txt
-echo "=== One-shot: packed-col ===" && ./lemmatizer --packed-col articles.txt
-echo "=== Loop: fixed-stride (30s) ===" && ./lemmatizer_loop articles.txt 30
-echo "=== Loop: packed (30s) ===" && ./lemmatizer_loop --packed articles.txt 30
-echo "=== Loop: packed-col (30s) ===" && ./lemmatizer_loop --packed-col articles.txt 30
+INPUT=articles.txt
+
+echo "=== One-shot: fixed-stride ===" && ./lemmatizer $INPUT 1>/dev/null && \
+echo "=== One-shot: packed ===" && ./lemmatizer --packed $INPUT 1>/dev/null && \
+echo "=== One-shot: packed-col ===" && ./lemmatizer --packed-col $INPUT 1>/dev/null && \
+echo "=== Loop: fixed-stride (30s) ===" && ./lemmatizer_loop $INPUT 30 && \
+echo "=== Loop: packed (30s) ===" && ./lemmatizer_loop --packed $INPUT 30 && \
+echo "=== Loop: packed-col (30s) ===" && ./lemmatizer_loop --packed-col $INPUT 30
 ```
 
 ---
