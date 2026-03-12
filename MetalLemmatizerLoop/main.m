@@ -1,3 +1,10 @@
+//
+//  main.m
+//  MetalLemmatizerLoop
+//
+//  Created by Illia Fedorovych on 12.03.2026.
+//
+
 #import <Foundation/Foundation.h>
 #import <time.h>
 #import "AnalyzerMetal.h"
@@ -59,5 +66,5 @@ int main(int argc, const char * argv[]) {
             [analyzer benchLoopFixedStride:words duration:runDuration];
         }
     }
-    return 0;
+    return EXIT_SUCCESS;
 }

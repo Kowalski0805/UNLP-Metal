@@ -1,3 +1,10 @@
+//
+//  main.m
+//  MetalLemmatizer
+//
+//  Created by Illia Fedorovych on 12.03.2026.
+//
+
 #import <Foundation/Foundation.h>
 #import <time.h>
 #import "AnalyzerMetal.h"
@@ -66,6 +73,5 @@ int main(int argc, const char * argv[]) {
         fprintf(stderr, "  GPU total (pack+kernel+decode):             %.3f ms\n", totalMs);
         fprintf(stderr, "  End-to-end (preprocess+GPU):                %.3f ms\n", preprocessMs + totalMs);
     }
-    return 0;
+    return EXIT_SUCCESS;
 }
-
